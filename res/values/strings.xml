@@ -1,3 +1,3 @@
 <resources>
-    <string name="accessibility_description">Deneysel ara kare görüntüsünü oyun üzerine koyar ve dokunmanın alttaki oyuna ulaşmasını sağlar. Ekran öğelerini okumaz, hareket göndermez. Görüntü almak için ayrıca her oturumda Android ekran paylaşım izni gerekir. Bu bir erişilebilirlik yardım aracı değildir; bu hizmet yalnızca dokunmayı geçiren görüntü katmanı içindir.</string>
+    <string name="accessibility_description">Shows the experimental generated-frame picture on top of a game and lets touches reach the game underneath. It does not read screen content or send gestures. Capturing the picture additionally needs Android\'s screen sharing permission in every session. This is not an accessibility aid; the service exists only to provide a touch-transparent overlay.</string>
 </resources>

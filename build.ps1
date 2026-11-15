@@ -31,6 +31,6 @@ Checked { & "$bt/zipalign.exe" -f -P 16 4 build/unsigned.apk build/aligned.apk }
 if(!(Test-Path -LiteralPath build/development.jks)){
     Checked { & "$JavaRoot/bin/keytool.exe" -genkeypair -keystore build/development.jks -storepass android -keypass android -alias framelab -keyalg RSA -keysize 2048 -validity 3650 -dname 'CN=FrameLab Local Development' }
 }
-Checked { & "$bt/apksigner.bat" sign --ks build/development.jks --ks-key-alias framelab --ks-pass pass:android --key-pass pass:android --out build/FrameLab-0.2.apk build/aligned.apk }
-Checked { & "$bt/apksigner.bat" verify --verbose build/FrameLab-0.2.apk }
-Write-Output "APK ready: $PSScriptRoot/build/FrameLab-0.2.apk"
+Checked { & "$bt/apksigner.bat" sign --ks build/development.jks --ks-key-alias framelab --ks-pass pass:android --key-pass pass:android --out build/FrameLab-0.3.apk build/aligned.apk }
+Checked { & "$bt/apksigner.bat" verify --verbose build/FrameLab-0.3.apk }
+Write-Output "APK ready: $PSScriptRoot/build/FrameLab-0.3.apk"

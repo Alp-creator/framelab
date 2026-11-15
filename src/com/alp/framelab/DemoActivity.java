@@ -11,9 +11,9 @@ public class DemoActivity extends Activity {
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         LinearLayout root=new LinearLayout(this);root.setOrientation(1);root.setPadding(12,28,12,20);root.setBackgroundColor(0xff101823);
-        TextView title=new TextView(this);title.setText("Hareket deneyi · solda 20 gerçek kare/s · sağda hedef 20 gerçek + 20 ara kare/s");title.setTextSize(19);title.setTextColor(Color.WHITE);root.addView(title);
+        TextView title=new TextView(this);title.setText("Motion demo · left: 20 real fps · right: target 20 real + 20 generated fps");title.setTextSize(19);title.setTextColor(Color.WHITE);root.addView(title);
         LinearLayout pair=new LinearLayout(this);source=new FrameView(this);result=new FrameView(this);pair.addView(source,new LinearLayout.LayoutParams(0,-1,1));pair.addView(result,new LinearLayout.LayoutParams(0,-1,1));root.addView(pair,new LinearLayout.LayoutParams(-1,0,1));
-        Button back=new Button(this);back.setText("Geri dön");back.setOnClickListener(v->finish());root.addView(back);setContentView(root);
+        Button back=new Button(this);back.setText("Back");back.setOnClickListener(v->finish());root.addView(back);setContentView(root);
         thread=new HandlerThread("FrameLab-demo");thread.start();worker=new Handler(thread.getLooper());worker.post(()->runDemo());
     }
     void runDemo(){try{
@@ -22,8 +22,8 @@ public class DemoActivity extends Activity {
         while(!closed){
             long now=System.nanoTime();if(now<next){try{Thread.sleep(Math.max(1,(next-now)/1_000_000));}catch(InterruptedException e){break;}continue;}
             next=Math.max(next+50_000_000L,now);int[] current=scene(w,h,index++);Bitmap real=Bitmap.createBitmap(current,w,h,Bitmap.Config.ARGB_8888);
-            source.performance="Kaynak • aynı 100 ms tampon";source.offer(real,now,false);
-            if(old!=null){int[] mid=new int[w*h];long t=System.nanoTime();double npu=NativeEngine.generate(engine,old,current,mid,w,h);double total=(System.nanoTime()-t)/1e6;result.performance=String.format(Locale.US,"NPU %.1f ms • toplam %.1f ms",npu,total);result.offer(Bitmap.createBitmap(mid,w,h,Bitmap.Config.ARGB_8888),(oldTime+now)/2,true);}
+            source.performance="Source • same 100 ms buffer";source.offer(real,now,false);
+            if(old!=null){int[] mid=new int[w*h];long t=System.nanoTime();double npu=NativeEngine.generate(engine,old,current,mid,w,h);double total=(System.nanoTime()-t)/1e6;result.performance=String.format(Locale.US,"NPU %.1f ms • total %.1f ms",npu,total);result.offer(Bitmap.createBitmap(mid,w,h,Bitmap.Config.ARGB_8888),(oldTime+now)/2,true);}
             result.offer(real,now,false);old=current;oldTime=now;
         }
     }catch(Throwable e){android.util.Log.e("FrameLab","Demo failed",e);runOnUiThread(()->{result.failed=true;result.performance="Hata: "+e.getMessage();result.invalidate();});}
