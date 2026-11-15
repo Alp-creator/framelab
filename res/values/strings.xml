@@ -1,0 +1,3 @@
+<resources>
+    <string name="accessibility_description">Deneysel ara kare görüntüsünü oyun üzerine koyar ve dokunmanın alttaki oyuna ulaşmasını sağlar. Ekran öğelerini okumaz, hareket göndermez. Görüntü almak için ayrıca her oturumda Android ekran paylaşım izni gerekir. Bu bir erişilebilirlik yardım aracı değildir; bu hizmet yalnızca dokunmayı geçiren görüntü katmanı içindir.</string>
+</resources>

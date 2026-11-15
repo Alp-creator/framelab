@@ -1,0 +1,10 @@
+# Build output, including the local development signing key (build/development.jks)
+build/
+
+# Compiled test and probe binaries
+npu-probe
+*.so
+*.apk
+*.idsig
+*.jks
+*.keystore
