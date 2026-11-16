@@ -10,4 +10,13 @@ final class NativeEngine {
     static native String flowInfo(long handle);
     static native double flow(long handle,java.nio.ByteBuffer previous,java.nio.ByteBuffer current,java.nio.ByteBuffer flowOut);
     static native void destroyFlow(long handle);
+    // x2 AI super resolution on the NPU. Input: width*height luma bytes. Output: width*height*4 detail bytes.
+    // model: -1 picks automatically (larger model if it fits budgetMs), otherwise the model index.
+    static native long createSr(int width,int height,String cacheDir,double budgetMs,int model);
+    static native String srInfo(long handle);
+    static native java.nio.ByteBuffer srInput(long handle);
+    static native java.nio.ByteBuffer srOutput(long handle);
+    static native double srRun(long handle);
+    static native void destroySr(long handle);
+    static native String srTest(int width,int height,String cacheDir);
 }

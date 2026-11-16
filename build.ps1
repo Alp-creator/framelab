@@ -12,7 +12,7 @@ $androidJar=Join-Path $sdk 'platforms/android-36/android.jar'
 $env:JAVA_HOME=$JavaRoot
 $env:PATH="$JavaRoot/bin;$env:PATH"
 New-Item -ItemType Directory -Force -Path build,build/classes,build/generated,build/dex,build/lib/arm64-v8a | Out-Null
-Checked { & "$ndk/toolchains/llvm/prebuilt/windows-x86_64/bin/aarch64-linux-android34-clang++.cmd" -std=c++17 -O3 -fPIC -shared -static-libstdc++ '-Wl,-z,max-page-size=16384' native/bridge.cpp -lneuralnetworks -o build/lib/arm64-v8a/libframelab.so }
+Checked { & "$ndk/toolchains/llvm/prebuilt/windows-x86_64/bin/aarch64-linux-android34-clang++.cmd" -std=c++17 -O3 -fPIC -shared -static-libstdc++ '-Wl,-z,max-page-size=16384' native/bridge.cpp -lneuralnetworks -landroid -o build/lib/arm64-v8a/libframelab.so }
 Checked { & "$bt/aapt2.exe" compile --dir res -o build/resources.zip }
 Checked { & "$bt/aapt2.exe" link -o build/base.apk --manifest AndroidManifest.xml -I $androidJar --java build/generated build/resources.zip }
 $sources=@(Get-ChildItem src,build/generated -Recurse -Filter '*.java' | ForEach-Object {$_.FullName})
@@ -31,6 +31,6 @@ Checked { & "$bt/zipalign.exe" -f -P 16 4 build/unsigned.apk build/aligned.apk }
 if(!(Test-Path -LiteralPath build/development.jks)){
     Checked { & "$JavaRoot/bin/keytool.exe" -genkeypair -keystore build/development.jks -storepass android -keypass android -alias framelab -keyalg RSA -keysize 2048 -validity 3650 -dname 'CN=FrameLab Local Development' }
 }
-Checked { & "$bt/apksigner.bat" sign --ks build/development.jks --ks-key-alias framelab --ks-pass pass:android --key-pass pass:android --out build/FrameLab-0.3.apk build/aligned.apk }
-Checked { & "$bt/apksigner.bat" verify --verbose build/FrameLab-0.3.apk }
-Write-Output "APK ready: $PSScriptRoot/build/FrameLab-0.3.apk"
+Checked { & "$bt/apksigner.bat" sign --ks build/development.jks --ks-key-alias framelab --ks-pass pass:android --key-pass pass:android --out build/FrameLab-0.4.apk build/aligned.apk }
+Checked { & "$bt/apksigner.bat" verify --verbose build/FrameLab-0.4.apk }
+Write-Output "APK ready: $PSScriptRoot/build/FrameLab-0.4.apk"

@@ -12,25 +12,40 @@ import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 
 public class MainActivity extends Activity {
-    TextView status; Button start,test; boolean tested=false;volatile boolean busy=false;
+    TextView status; Button start,test,srTest; boolean tested=false;volatile boolean busy=false;
     @Override public void onCreate(Bundle state){
         super.onCreate(state);
         ScrollView scroll=new ScrollView(this);LinearLayout root=new LinearLayout(this);root.setOrientation(1);root.setPadding(32,48,32,48);root.setBackgroundColor(Color.rgb(15,23,35));scroll.addView(root);setContentView(scroll);
-        label(root,"FrameLab",32,Color.WHITE);label(root,"NPU-assisted frame generation • Experimental 0.3",17,0xff66ddc5);
-        label(root,"Finds the motion between two real frames and inserts a generated frame in between. The NPU estimates the motion, the GPU draws the generated frame. Fast motion can cause visual artifacts, and about half a frame of extra display latency is added. Not every game is supported; a higher frame rate is not guaranteed.",17,0xffd4dce8);
-        status=label(root,"Turn frame generation on or off. You can also switch it in-game with the MODE button.",16,0xffffd27d);
-        Spinner modes=new Spinner(this);modes.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"NPU · frame generation","OFF · capture passthrough only"}));
-        modes.setSelection(getPreferences(0).getInt("mode",0)==2?1:0);root.addView(modes);
-        modes.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){public void onNothingSelected(android.widget.AdapterView<?> p){} public void onItemSelected(android.widget.AdapterView<?> p,View v,int pos,long id){int b=pos==0?0:2;getPreferences(0).edit().putInt("mode",b).apply();CaptureService.setMode(MainActivity.this,b);}});
+        label(root,"FrameLab",32,Color.WHITE);label(root,"NPU frame generation and AI super resolution • Experimental 0.4",17,0xff66ddc5);
+        label(root,"NPU: finds the motion between two real frames and inserts a generated frame in between. Fast motion can cause visual artifacts, and about half a frame of extra display latency is added.\n\nSR: captures the game at half resolution and lets a small trained neural network on the NPU restore the full-resolution detail (x2, up to 4K output). Works best when the game itself renders at a lower resolution. Not every game is supported.",17,0xffd4dce8);
+        status=label(root,"Choose a mode. You can also switch it in-game with the MODE button (long press in SR: split-screen comparison).",16,0xffffd27d);
+        Spinner modes=new Spinner(this);modes.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"NPU · frame generation","SR · AI super resolution x2 (NPU)","OFF · capture passthrough only"}));
+        modes.setSelection(Math.max(0,Math.min(2,getPreferences(0).getInt("mode",0))));root.addView(modes);
+        modes.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){public void onNothingSelected(android.widget.AdapterView<?> p){} public void onItemSelected(android.widget.AdapterView<?> p,View v,int pos,long id){getPreferences(0).edit().putInt("mode",pos).apply();CaptureService.setMode(MainActivity.this,pos);}});
         test=button(root,"1 · Test the NPU",v->runTest());
+        srTest=button(root,"Test AI super resolution on the NPU",v->runSrTest());
         button(root,"Motion comparison demo",v->startActivity(new Intent(this,DemoActivity.class)));
         button(root,"2 · Allow the overlay",v->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         label(root,"On the Accessibility page that opens, enable the FrameLab Experimental service. It does not read screen content or send touches; it is only used to show the picture on top of the game.",15,0xffaebdce);
         start=button(root,"3 · Try it in a game",v->capture());start.setEnabled(true);
         label(root,"In the sharing dialog choose ‘Share one app’, then pick the game. Do not choose ‘Entire screen’. Open the game in the orientation you want first. To close the overlay, tap STOP in the top right corner or the notification.",16,0xffd4dce8);
         button(root,"Stop",v->{stopService(new Intent(this,CaptureService.class));status.setText("Stopped.");});
-        label(root,"Runs entirely on the device. No internet permission, no recording, no audio capture. NPU: motion estimation. GPU: drawing the generated frame. CPU: preparation and the small motion map. Timing measurements are written to a local CSV file; no picture is stored. This version does not use a trained AI model.",14,0xffaebdce);
+        label(root,"Runs entirely on the device. No internet permission, no recording, no audio capture. Frame generation: the NPU estimates motion (analytic block matching, not a trained model), the GPU draws the generated frame. Super resolution: a trained 5k-parameter network runs on the NPU; colour is upscaled on the GPU. Timing measurements are written to a local CSV file; no picture is stored.",14,0xffaebdce);
         if(getIntent().getBooleanExtra("selftest",false))runTest();
+        if(getIntent().getBooleanExtra("srtest",false))runSrTest();
+    }
+    /** Builds the super-resolution graph for this screen (half size in, full size out) and times it, plus 4K. */
+    void runSrTest(){
+        if(busy)return;busy=true;srTest.setEnabled(false);status.setText("Compiling and checking the super-resolution network on the accelerator…");
+        android.graphics.Rect b=getSystemService(WindowManager.class).getMaximumWindowMetrics().getBounds();
+        int w=Math.max(b.width(),b.height()),h=Math.min(b.width(),b.height()); // games run in landscape
+        new Thread(()->{String report;
+            try{report=NativeEngine.srTest(w/2/4*4,h/2/2*2,getCodeCacheDir().getPath());}catch(Throwable e){report="Super-resolution test failed: "+e.getMessage();}
+            android.util.Log.i("FrameLab",report);
+            try(FileOutputStream f=openFileOutput("sr-test.txt",MODE_PRIVATE)){f.write(report.getBytes(StandardCharsets.UTF_8));}catch(Exception ignored){}
+            final String result=report;
+            runOnUiThread(()->{busy=false;if(isDestroyed())return;srTest.setEnabled(true);status.setText(result);});
+        },"SR-test").start();
     }
     TextView label(LinearLayout root,String text,int sp,int color){TextView t=new TextView(this);t.setText(text);t.setTextSize(sp);t.setTextColor(color);t.setPadding(0,10,0,16);root.addView(t);return t;}
     Button button(LinearLayout root,String text,View.OnClickListener listener){Button b=new Button(this);b.setText(text);b.setAllCaps(false);b.setOnClickListener(listener);root.addView(b,new LinearLayout.LayoutParams(-1,-2));return b;}

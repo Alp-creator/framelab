@@ -1,5 +1,6 @@
 #include "engine.h"
 #include "flow.h"
+#include "sr.h"
 #include <jni.h>
 #include <memory>
 static void fail(JNIEnv* env,const std::exception& e){env->ThrowNew(env->FindClass("java/lang/IllegalStateException"),e.what());}
@@ -33,3 +34,43 @@ extern "C" JNIEXPORT jdouble JNICALL Java_com_alp_framelab_NativeEngine_flow(JNI
     try{auto e=reinterpret_cast<FlowEngine*>(handle);return e->flow(pa,pb,po)?e->npuMs:-1.0;}catch(const std::exception& e){fail(env,e);return 0;}
 }
 extern "C" JNIEXPORT void JNICALL Java_com_alp_framelab_NativeEngine_destroyFlow(JNIEnv*,jclass,jlong handle){delete reinterpret_cast<FlowEngine*>(handle);}
+
+// x2 AI super resolution: the GPU reads luma straight into the NPU's input memory and uploads the
+// detail straight from its output memory; both are direct ByteBuffers over the same shared mapping.
+struct SrHandle{std::unique_ptr<sr::Net> net;std::string log;};
+static std::string jstr(JNIEnv* env,jstring s){if(!s)return "";const char* c=env->GetStringUTFChars(s,nullptr);std::string r=c?c:"";if(c)env->ReleaseStringUTFChars(s,c);return r;}
+extern "C" JNIEXPORT jlong JNICALL Java_com_alp_framelab_NativeEngine_createSr(JNIEnv* env,jclass,jint w,jint h,jstring cache,jdouble budget,jint model){
+    if(w<8||h<8||w>4096||h>4096||w%4){env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"),"Invalid super-resolution size");return 0;}
+    try{auto s=std::make_unique<SrHandle>();s->net=sr::choose(w,h,jstr(env,cache),budget,s->log,model);return reinterpret_cast<jlong>(s.release());}catch(const std::exception& e){fail(env,e);return 0;}
+}
+extern "C" JNIEXPORT jstring JNICALL Java_com_alp_framelab_NativeEngine_srInfo(JNIEnv* env,jclass,jlong handle){
+    auto s=reinterpret_cast<SrHandle*>(handle);return env->NewStringUTF((s->net->describe()+"\n"+s->log).c_str());
+}
+extern "C" JNIEXPORT jobject JNICALL Java_com_alp_framelab_NativeEngine_srInput(JNIEnv* env,jclass,jlong handle){
+    auto n=reinterpret_cast<SrHandle*>(handle)->net.get();return env->NewDirectByteBuffer(n->in,jlong(n->inBytes));
+}
+extern "C" JNIEXPORT jobject JNICALL Java_com_alp_framelab_NativeEngine_srOutput(JNIEnv* env,jclass,jlong handle){
+    auto n=reinterpret_cast<SrHandle*>(handle)->net.get();return env->NewDirectByteBuffer(n->out,jlong(n->outBytes));
+}
+extern "C" JNIEXPORT jdouble JNICALL Java_com_alp_framelab_NativeEngine_srRun(JNIEnv* env,jclass,jlong handle){
+    try{return reinterpret_cast<SrHandle*>(handle)->net->run();}catch(const std::exception& e){fail(env,e);return 0;}
+}
+extern "C" JNIEXPORT void JNICALL Java_com_alp_framelab_NativeEngine_destroySr(JNIEnv*,jclass,jlong handle){delete reinterpret_cast<SrHandle*>(handle);}
+// In-app self-test: the graph chosen for this screen, and the same graph at 4K output sizes.
+extern "C" JNIEXPORT jstring JNICALL Java_com_alp_framelab_NativeEngine_srTest(JNIEnv* env,jclass,jint w,jint h,jstring cache){
+    try{
+        std::string log;auto net=sr::choose(w,h,jstr(env,cache),20.0,log);
+        std::ostringstream s;s<<"device="<<net->dev.name<<"\ngraph="<<sr::kindName(net->kind)<<", model "<<net->model.name<<" ("<<net->model.macsPerPixel<<" MAC/px)\nCPU fallback=disabled\n";
+        auto bench=[&](sr::Net& n){sr::testPattern(n.in,n.W,n.H);std::vector<double> t;for(int i=0;i<10;i++)t.push_back(n.run());t.erase(t.begin(),t.begin()+2);return sr::median(t);};
+        double ms=bench(*net);
+        s<<w<<"x"<<h<<" -> "<<2*w<<"x"<<2*h<<": "<<ms<<" ms per frame ("<<int(1000/ms)<<" fps)\n";
+        const int sizes[][2]={{1920,1080},{1920,1200}};
+        for(auto& z:sizes){
+            if(z[0]==w&&z[1]==h)continue;
+            try{sr::Net n(net->model,net->kind,z[0],z[1],net->dev);double t=bench(n);s<<z[0]<<"x"<<z[1]<<" -> "<<2*z[0]<<"x"<<2*z[1]<<" (4K): "<<t<<" ms ("<<int(1000/t)<<" fps)\n";}
+            catch(const std::exception& e){s<<z[0]<<"x"<<z[1]<<": "<<e.what()<<"\n";}
+        }
+        s<<"\ncandidates:\n"<<log;
+        return env->NewStringUTF(s.str().c_str());
+    }catch(const std::exception& e){fail(env,e);return nullptr;}
+}

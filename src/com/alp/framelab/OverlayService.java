@@ -30,11 +30,15 @@ public class OverlayService extends AccessibilityService {
         stop=new Button(this);stop.setText("STOP");stop.setAllCaps(false);stop.setAlpha(.55f);stop.setOnClickListener(v->{stopService(new Intent(this,CaptureService.class));hide();});
         WindowManager.LayoutParams s=new WindowManager.LayoutParams((int)(96*d),(int)(44*d),WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,PixelFormat.TRANSLUCENT);
         s.gravity=Gravity.TOP|Gravity.END;s.setTitle("FrameLab stop");wm.addView(stop,s);
-        mode=new Button(this);mode.setText("MODE");mode.setAlpha(.55f);mode.setOnClickListener(v->{CaptureService.setMode(this,CaptureService.requestedBackend==0?2:0);});
+        // Tap: frame generation -> AI super resolution -> off. Long press in super resolution: split-screen comparison.
+        mode=new Button(this);mode.setText("MODE");mode.setAlpha(.55f);mode.setOnClickListener(v->{CaptureService.setMode(this,(CaptureService.requestedBackend+1)%3);});
+        mode.setOnLongClickListener(v->{CaptureService.srCompare=!CaptureService.srCompare;return true;});
         WindowManager.LayoutParams m=new WindowManager.LayoutParams((int)(80*d),(int)(44*d),WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,PixelFormat.TRANSLUCENT);m.gravity=Gravity.TOP|Gravity.END;m.x=(int)(96*d);m.setTitle("FrameLab mode");wm.addView(mode,m);return surface;
     }
     void status(String text,boolean error){TextView h=hud;if(h!=null)h.post(()->{h.setText(text);h.setTextColor(error?0xffff8d8d:0xff74f0d0);});}
-    void hide(){if(wm!=null){if(root!=null){wm.removeView(root);root=null;surface=null;hud=null;}if(stop!=null){wm.removeView(stop);stop=null;}if(mode!=null){wm.removeView(mode);mode=null;}}}
+    // A view may never have been attached (for example when the service token was not valid yet), so removal must not throw.
+    void remove(View v){if(v!=null&&wm!=null)try{wm.removeViewImmediate(v);}catch(RuntimeException ignored){}}
+    void hide(){remove(root);root=null;surface=null;hud=null;remove(stop);stop=null;remove(mode);mode=null;}
     @Override public void onAccessibilityEvent(AccessibilityEvent event){} // No events requested, no UI inspection.
     @Override public void onInterrupt(){stopService(new Intent(this,CaptureService.class));hide();}
     @Override public void onDestroy(){stopService(new Intent(this,CaptureService.class));hide();instance=null;super.onDestroy();}
