@@ -167,7 +167,7 @@ FrameLab • NPU • captured 30/s • shown real 30 + generated 30/s • motion
 FrameLab • SR ×2 AI • 1472x920 → 2944x1840 • captured 30/s • shown 30/s • NPU 5.3 ms • total 21.7 ms
 ```
 
-Tap **MODE** to switch NPU → SR → OFF; in SR, long-press it for the split-screen comparison. Stop with **STOP** in the top right corner or from the notification.
+Tap **MODE** to switch NPU → SR → OFF; in SR, long-press it for the split-screen comparison. **HIDE**, left of MODE, hides the status line for a calmer picture; **SHOW** brings it back. The choice is remembered, and error messages still appear while it is hidden. Stop with **STOP** in the top right corner or from the notification.
 
 Everything runs on the device. The app has no internet permission and records nothing.
 

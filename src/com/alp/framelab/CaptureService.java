@@ -89,7 +89,7 @@ public class CaptureService extends Service implements SurfaceHolder.Callback {
             Intent token=i.getParcelableExtra("token",Intent.class);
             projection=getSystemService(MediaProjectionManager.class).getMediaProjection(i.getIntExtra("result",0),token);
             projection.registerCallback(new MediaProjection.Callback(){
-                @Override public void onStop(){android.util.Log.i("FrameLab","screen capture stopped by the system");main.post(()->stopSelf());}
+                @Override public void onStop(){android.util.Log.i("FrameLab","screen capture projection ended");main.post(()->stopSelf());}
                 @Override public void onCapturedContentResize(int w,int h){worker.post(()->{try{resize(w,h);}catch(Throwable e){error(e);}});}
             },main);
             // Developer switch for screenshots of the output: run-as com.alp.framelab touch files/insecure
