@@ -58,7 +58,9 @@ public class CaptureService extends Service implements SurfaceHolder.Callback {
     // at most SR_BUDGET_MS of NPU time per frame, otherwise the faster one.
     static final double SR_BUDGET_MS=20;
     static volatile boolean srCompare=false; // left half plain bilinear, right half AI (long-press MODE)
-    long sr=0;int srW,srH,srCount,lumaTex,lumaFbo,resTex,pLuma,pSr,fgW,fgH,contentW,contentH;ByteBuffer srIn,srOut;byte[] srLast;boolean srHave=false;double uploadSum=0;String srInfo="",srError="";
+    long sr=0;int srW,srH,srCount,lumaTex,lumaFbo,resTex,pLuma,pSr,fgW,fgH,contentW,contentH;ByteBuffer srIn,srOut;byte[] srLast;boolean srHave=false;double uploadSum=0;String srInfo="",srError="",srWarning="";
+    // A failed NPU pass rebuilds the graph; only repeated failures within SR_FAIL_WINDOW_NS end SR (the capture keeps running).
+    static final int SR_MAX_FAILURES=3;static final long SR_FAIL_WINDOW_NS=30_000_000_000L;int srFailures=0;long srFailSince=0;
     int backend=-1;long backendPoll=0;String mode="NPU";
     java.io.FileOutputStream metrics;
     int inputCount=0;double flowSum=0;
@@ -87,7 +89,7 @@ public class CaptureService extends Service implements SurfaceHolder.Callback {
             Intent token=i.getParcelableExtra("token",Intent.class);
             projection=getSystemService(MediaProjectionManager.class).getMediaProjection(i.getIntExtra("result",0),token);
             projection.registerCallback(new MediaProjection.Callback(){
-                @Override public void onStop(){main.post(()->stopSelf());}
+                @Override public void onStop(){android.util.Log.i("FrameLab","screen capture stopped by the system");main.post(()->stopSelf());}
                 @Override public void onCapturedContentResize(int w,int h){worker.post(()->{try{resize(w,h);}catch(Throwable e){error(e);}});}
             },main);
             // Developer switch for screenshots of the output: run-as com.alp.framelab touch files/insecure
@@ -321,10 +323,21 @@ public class CaptureService extends Service implements SurfaceHolder.Callback {
         for(int k=0,i=0;k<pixels;k+=step,i++){int v=srIn.get(k)&255,d=v-(srLast[i]&255);if(d>DIFF||d<-DIFF)moved++;bright+=v;}
         if(srHave&&moved<n/100&&now-lastTime<STALE_NS){repeatCount++;return;}
         for(int k=0,i=0;k<pixels;k+=step,i++)srLast[i]=srIn.get(k);
-        if(bright<n){if(firstBlack==0)firstBlack=now;if(now-firstBlack>4_000_000_000L)throw new IllegalStateException("The capture is black. Choose single-app sharing, or try a game without protected content.");}else firstBlack=0;
+        // A black capture (protected content, or a long dark loading screen) only shows a warning: ending the
+        // session here would also end it on any game scene that stays black for a few seconds.
+        if(bright<n){if(firstBlack==0)firstBlack=now;if(now-firstBlack>4_000_000_000L)srWarning="the capture is black (protected content?)";}else{firstBlack=0;srWarning="";}
         inputCount++;
         // 3. NPU: the detail bilinear upscaling misses, four bytes per low-res pixel.
-        double npu=NativeEngine.srRun(sr);long t2=System.nanoTime();
+        double npu;
+        try{npu=NativeEngine.srRun(sr);}
+        catch(Throwable e){
+            if(now-srFailSince>SR_FAIL_WINDOW_NS){srFailSince=now;srFailures=0;}
+            android.util.Log.w("FrameLab","NPU pass failed (failure "+(srFailures+1)+" within 30 s), rebuilding the super-resolution graph",e);
+            if(++srFailures<=SR_MAX_FAILURES){releaseSr();return;} // the next frame builds the graph again
+            srError="AI super resolution stopped after repeated NPU errors: "+String.valueOf(e.getMessage()).split("\n")[0];
+            status("FrameLab • "+srError,true);setMode(this,OFF);chooseBackend(OFF);return;
+        }
+        long t2=System.nanoTime();
         // 4. Detail into a texture, then one full-size pass: bilinear colour + AI detail.
         GLES20.glActiveTexture(GLES20.GL_TEXTURE1);GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,resTex);srOut.position(0);
         GLES20.glTexSubImage2D(GLES20.GL_TEXTURE_2D,0,0,0,capW,capH,GLES20.GL_RGBA,GLES20.GL_UNSIGNED_BYTE,srOut);
@@ -381,7 +394,7 @@ public class CaptureService extends Service implements SurfaceHolder.Callback {
         double seconds=(now-statsEpoch)/1e9;
         final int div=backend==SR?srCount:midCount; // frames the per-frame timings below are averaged over
         String text=backend==OFF?String.format(Locale.US,"FrameLab • OFF • captured %.0f fps",inputCount/seconds)+(srError.isEmpty()?"":" • "+srError)
-            :backend==SR?String.format(Locale.US,"FrameLab • SR ×2 AI • %dx%d → %dx%d • captured %.0f/s • shown %.0f/s • NPU %.1f ms • total %.1f ms%s",capW,capH,2*capW,2*capH,inputCount/seconds,realCount/seconds,div>0?npuSum/div:0,div>0?workSum/div:0,srCompare?" • left: bilinear | right: AI":"")
+            :backend==SR?String.format(Locale.US,"FrameLab • SR ×2 AI • %dx%d → %dx%d • captured %.0f/s • shown %.0f/s • NPU %.1f ms • total %.1f ms%s",capW,capH,2*capW,2*capH,inputCount/seconds,realCount/seconds,div>0?npuSum/div:0,div>0?workSum/div:0,srCompare?" • left: bilinear | right: AI":"")+(srWarning.isEmpty()?"":" • "+srWarning)
             :bypassUntil!=0?String.format(Locale.US,"FrameLab • %s • generation paused • captured %.0f fps • retry in %d s",mode,inputCount/seconds,Math.max(0,(bypassUntil-now)/1_000_000_000L)):String.format(Locale.US,"FrameLab • %s • captured %.0f/s • shown real %.0f + generated %.0f/s • motion %.1f ms • total %.1f ms",mode,inputCount/seconds,realCount/seconds,midCount/seconds,midCount>0?npuSum/midCount:0,midCount>0?workSum/midCount:0);
         if(metrics!=null)try{String row=String.format(Locale.US,"%d,%s,%d,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%d,%.4f\n",now,mode,bypassUntil!=0?1:0,inputCount/seconds,realCount/seconds,midCount/seconds,div>0?npuSum/div:0,div>0?flowSum/div:0,div>0?workSum/div:0,readCount>0?readSum/readCount:0,readCount>0?texSum/readCount:0,capW,capH,div>0?uploadSum/div:0);metrics.write(row.getBytes(java.nio.charset.StandardCharsets.UTF_8));metrics.flush();}catch(Exception e){android.util.Log.w("FrameLab","metrics",e);}
         android.util.Log.i("FrameLab","changed-pixel histogram <1,8,24,48,100,200,400,800,1600,3200,6400,more: "+java.util.Arrays.toString(histogram));java.util.Arrays.fill(histogram,0);
@@ -432,6 +445,7 @@ public class CaptureService extends Service implements SurfaceHolder.Callback {
         if(projection!=null){projection.stop();projection=null;}
     }
     @Override public void onDestroy(){
+        android.util.Log.i("FrameLab","capture service stopping, mode "+mode);
         stopping=true;active=false;
         if(worker!=null){
             // Finish all GL work before the output window disappears.

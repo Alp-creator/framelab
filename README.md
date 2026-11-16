@@ -94,7 +94,8 @@ Measured on the TB373FU (Android 16). The NPU itself (`mtk-mdla_shim`; `mtk-neur
 
 - On the device the NPU output matches the CPU reference of the same int8 arithmetic to within one step, and the PC simulation to within two steps of 255 (mean difference 0.035). The device PSNR equals the PC simulation: 28.16 → 37.13 dB on the app screenshot.
 - The float16 graph also runs on the MDLA but takes twice as long (8.9 ms); `mtk-dsp_shim` accepts none of the graphs. The 8-channel model is hardly faster (3.8 ms), so the 16-channel model is always chosen here.
-- In GTA Vice City – Definitive Edition at 30 fps, every game frame is upscaled (30 of 30 shown). The NPU takes 4.8–7.6 ms, the whole step 12–25 ms. The largest share is waiting for the GPU to deliver the low-res luma: the readback takes 3.5–13 ms while the game keeps the GPU busy. Uploading the detail takes 0.5–0.9 ms.
+- In GTA Vice City – Definitive Edition at 30 fps, every game frame is upscaled (30 of 30 shown) while the tablet is cool. The NPU takes 4.8–7.6 ms, the whole step 11–25 ms. The largest share is waiting for the GPU to deliver the low-res luma: the readback takes 2.5–13 ms while the game keeps the GPU busy. Uploading the detail takes 0.5–0.9 ms.
+- After a minute or two of play the tablet runs hot (thermal status 2, CPU/GPU/NPU 67 °C). The NPU then takes 8 ms and the readback 27–38 ms, so SR shows 16–24 fps instead of 30. A ten-minute session in that state ran without a stop.
 
 `tools/sr_compare.py` makes side-by-side crops and PSNR from a native-resolution frame, either from the device output of `tests/sr_test.cpp` or from a simulation of the int8 graph on the PC.
 
@@ -116,7 +117,7 @@ Whether `mtk-neuron_shim` (the accelerator that accepts the graph on this device
 - **Finer motion field** (for example 40×24 blocks) to shrink the halos around moving objects.
 - **Other chipsets**: device selection currently accepts only NNAPI accelerators whose name contains `mtk`.
 - **A trained interpolation model** that fits the time budget of a 30 fps game.
-- **Asynchronous readback for SR** (pixel buffer object + fence): the NPU itself needs about 5 ms, but waiting for the GPU's luma readback takes up to 13 ms in a busy game.
+- **Asynchronous readback for SR** (pixel buffer object + fence, or `ImageReader` with luma on the CPU): the NPU itself needs 5–8 ms, but waiting for the GPU's luma readback takes up to 38 ms in a busy game on a hot tablet.
 
 ## Building
 
